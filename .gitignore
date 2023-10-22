@@ -1,0 +1,10 @@
+.vs/
+.xmake/
+.vscode/
+
+bin/
+build/
+Bin/
+Build/
+vs*/
+VS*/
