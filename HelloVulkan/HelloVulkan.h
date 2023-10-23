@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <optional>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -22,6 +23,18 @@ public:
 	void run();
 
 private:
+	struct QueueFamilyIndices
+	{
+		std::optional<uint32_t> graphicsFamily;
+		std::optional<uint32_t> presentFamily;
+
+		bool isComplete()
+		{
+			return graphicsFamily.has_value() && presentFamily.has_value();
+		}
+	};
+
+private:
 	void initWindow();
 	void initVulkan();
 	void mainLoop();
@@ -29,12 +42,14 @@ private:
 
 	bool checkValidationLayerSupport(const std::vector<const char*>& validationLayers);
 	std::vector<const char*> getRequiredExtensions();
-	void createInstance();
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+	void createInstance();
 	void setupDebugMessenger();
+	void createSurface();
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device);
 	void pickPhysicalDevice();
-	uint32_t findQueueFamilies(VkPhysicalDevice device);
+	void createLogicalDevice();
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallBack(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -49,7 +64,14 @@ private:
 private:
 	GLFWwindow* mWindow{ nullptr };
 
+	const std::vector<const char*> mValidationLayers{ "VK_LAYER_KHRONOS_validation" };
+
 	VkInstance mInstance{};
 	VkDebugUtilsMessengerEXT mDebugMessenger{};
+	VkSurfaceKHR mSurface{};
+	VkPhysicalDevice mPhysicalDevice{};
+	VkDevice mDevice{};
+	VkQueue mGraphicsQueue{};
+	VkQueue mPresentQueue{};
 
 };
