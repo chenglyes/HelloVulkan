@@ -34,6 +34,13 @@ private:
 		}
 	};
 
+	struct SwapChainSupportDetails
+	{
+		VkSurfaceCapabilitiesKHR capabilities;
+		std::vector<VkSurfaceFormatKHR> formats;
+		std::vector<VkPresentModeKHR> presentModes;
+	};
+
 private:
 	void initWindow();
 	void initVulkan();
@@ -47,6 +54,8 @@ private:
 	void setupDebugMessenger();
 	void createSurface();
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+	bool checkDeviceExtensionSupport(VkPhysicalDevice device);
+	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device);
 	void pickPhysicalDevice();
 	void createLogicalDevice();
@@ -65,6 +74,7 @@ private:
 	GLFWwindow* mWindow{ nullptr };
 
 	const std::vector<const char*> mValidationLayers{ "VK_LAYER_KHRONOS_validation" };
+	const std::vector<const char*> mDeviceExtensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 	VkInstance mInstance{};
 	VkDebugUtilsMessengerEXT mDebugMessenger{};

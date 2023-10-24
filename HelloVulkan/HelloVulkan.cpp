@@ -5,8 +5,10 @@
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
+#include <chrono>
 #include <iostream>
 #include <cstdlib>
+#include <thread>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -46,6 +48,7 @@ void HelloVulkanApp::mainLoop()
 	while (!::glfwWindowShouldClose(mWindow))
 	{
 		::glfwPollEvents();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000 / 60));
 	}
 }
 
@@ -195,7 +198,7 @@ HelloVulkanApp::QueueFamilyIndices HelloVulkanApp::findQueueFamilies(VkPhysicalD
 		}
 
 		VkBool32 presentSupport{ false };
-		::vkGetPhysicalDeviceSurfaceSupportKHR(mPhysicalDevice, i, mSurface, &presentSupport);
+		::vkGetPhysicalDeviceSurfaceSupportKHR(device, i, mSurface, &presentSupport);
 		if (presentSupport)
 		{
 			indices.presentFamily = i;
@@ -208,6 +211,52 @@ HelloVulkanApp::QueueFamilyIndices HelloVulkanApp::findQueueFamilies(VkPhysicalD
 	return indices;
 }
 
+bool HelloVulkanApp::checkDeviceExtensionSupport(VkPhysicalDevice device)
+{
+	uint32_t extensionCount{ 0 };
+	::vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+	std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+	::vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+	for (const char* extensionName : mDeviceExtensions)
+	{
+		auto it = std::find_if(availableExtensions.begin(), availableExtensions.end(), [=](const auto extension)
+			{
+				return strcmp(extensionName, extension.extensionName) == 0;
+			});
+
+		if (it == availableExtensions.end())
+			return false;
+	}
+
+	return true;
+}
+
+HelloVulkanApp::SwapChainSupportDetails HelloVulkanApp::querySwapChainSupport(VkPhysicalDevice device)
+{
+	SwapChainSupportDetails details{};
+
+	::vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, mSurface, &details.capabilities);
+
+	uint32_t formatCount{ 0 };
+	::vkGetPhysicalDeviceSurfaceFormatsKHR(device, mSurface, &formatCount, nullptr);
+	if (formatCount != 0)
+	{
+		details.formats.resize(formatCount);
+		::vkGetPhysicalDeviceSurfaceFormatsKHR(device, mSurface, &formatCount, details.formats.data());
+	}
+
+	uint32_t presentModeCount{ 0 };
+	::vkGetPhysicalDeviceSurfacePresentModesKHR(device, mSurface, &presentModeCount, nullptr);
+	if (presentModeCount != 0)
+	{
+		details.presentModes.resize(presentModeCount);
+		::vkGetPhysicalDeviceSurfacePresentModesKHR(device, mSurface, &presentModeCount, details.presentModes.data());
+	}
+
+	return details;
+}
+
 bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice device)
 {
 	VkPhysicalDeviceProperties deviceProperties{};
@@ -218,7 +267,15 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice device)
 	// TODO: Check properties and features
 
 	auto indices = findQueueFamilies(device);
-	return indices.isComplete();
+	bool extensionSupported = checkDeviceExtensionSupport(device);
+	bool swapChainAdequate{ false };
+	if (extensionSupported)
+	{
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+		swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+	}
+
+	return indices.isComplete() && extensionSupported && swapChainAdequate;
 }
 
 void HelloVulkanApp::pickPhysicalDevice()
@@ -279,6 +336,9 @@ void HelloVulkanApp::createLogicalDevice()
 		createInfo.enabledLayerCount = static_cast<uint32_t>(mValidationLayers.size());
 		createInfo.ppEnabledLayerNames = mValidationLayers.data();
 	}
+
+	createInfo.enabledExtensionCount = static_cast<uint32_t>(mDeviceExtensions.size());
+	createInfo.ppEnabledExtensionNames = mDeviceExtensions.data();
 	
 	CHECK_AND_THROW("Failed to create logical device!",
 		::vkCreateDevice(mPhysicalDevice, &createInfo, nullptr, &mDevice));
