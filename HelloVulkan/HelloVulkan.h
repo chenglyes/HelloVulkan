@@ -59,6 +59,10 @@ private:
 	bool isDeviceSuitable(VkPhysicalDevice device);
 	void pickPhysicalDevice();
 	void createLogicalDevice();
+	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+	void createSwapChain();
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallBack(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -83,5 +87,6 @@ private:
 	VkDevice mDevice{};
 	VkQueue mGraphicsQueue{};
 	VkQueue mPresentQueue{};
+	VkSwapchainKHR m_SwapChain{};
 
 };
