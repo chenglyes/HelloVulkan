@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 #include <optional>
 
@@ -63,6 +64,9 @@ private:
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 	void createSwapChain();
+	void createImageViews();
+	VkShaderModule createShaderModule(const std::vector<char>& code);
+	void createGraphicsPipeline();
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallBack(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -73,6 +77,7 @@ private:
 		const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 	static void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
 		const VkAllocationCallbacks* pAllocator);
+	static std::vector<char> readFile(const std::string& filename);
 
 private:
 	GLFWwindow* mWindow{ nullptr };
@@ -87,6 +92,10 @@ private:
 	VkDevice mDevice{};
 	VkQueue mGraphicsQueue{};
 	VkQueue mPresentQueue{};
-	VkSwapchainKHR m_SwapChain{};
+	VkSwapchainKHR mSwapChain{};
+	std::vector<VkImage> mSwapChainImages;
+	std::vector<VkImageView> mSwapChainImageViews;
+	VkFormat mSwapChainImageFormat{};
+	VkExtent2D mSwapChainExtent{};
 
 };
