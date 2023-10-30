@@ -68,6 +68,12 @@ private:
 	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createRenderPass();
 	void createGraphicsPipeline();
+	void createFrameBuffers();
+	void createCommandPool();
+	void createCommandBuffer();
+
+	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+	void drawFrame();
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallBack(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -101,5 +107,8 @@ private:
 	VkRenderPass mRenderPass{};
 	VkPipelineLayout mPipelineLayout{};
 	VkPipeline mGraphicsPipeline{};
+	std::vector<VkFramebuffer> mSwapChainFrameBuffers;
+	VkCommandPool mCommandPool{};
+	VkCommandBuffer mCommandBuffer{};
 
 };

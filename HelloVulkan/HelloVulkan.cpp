@@ -46,6 +46,9 @@ void HelloVulkanApp::initVulkan()
 	createImageViews();
 	createRenderPass();
 	createGraphicsPipeline();
+	createFrameBuffers();
+	createCommandPool();
+	createCommandBuffer();
 }
 
 void HelloVulkanApp::mainLoop()
@@ -53,12 +56,22 @@ void HelloVulkanApp::mainLoop()
 	while (!::glfwWindowShouldClose(mWindow))
 	{
 		::glfwPollEvents();
+
+		drawFrame();
+
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000 / 60));
 	}
 }
 
 void HelloVulkanApp::cleanup()
 {
+	::vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
+
+	for (auto framebuffer : mSwapChainFrameBuffers)
+	{
+		::vkDestroyFramebuffer(mDevice, framebuffer, nullptr);
+	}
+
 	::vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
 	::vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
 	::vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
@@ -672,6 +685,104 @@ void HelloVulkanApp::createGraphicsPipeline()
 
 	::vkDestroyShaderModule(mDevice, vertShaderModule, nullptr);
 	::vkDestroyShaderModule(mDevice, fragShaderModule, nullptr);
+}
+
+void HelloVulkanApp::createFrameBuffers()
+{
+	mSwapChainFrameBuffers.resize(mSwapChainImageViews.size());
+
+	for (size_t i = 0; i < mSwapChainImageViews.size(); ++i)
+	{
+		VkImageView attachments[] = { mSwapChainImageViews[i] };
+		VkFramebufferCreateInfo frameBufferInfo{};
+		frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		frameBufferInfo.renderPass = mRenderPass;
+		frameBufferInfo.attachmentCount = 1;
+		frameBufferInfo.pAttachments = &mSwapChainImageViews[i];
+		frameBufferInfo.width = mSwapChainExtent.width;
+		frameBufferInfo.height = mSwapChainExtent.height;
+		frameBufferInfo.layers = 1;
+
+		CHECK_AND_THROW("Failed to create framebuffer!",
+			::vkCreateFramebuffer(mDevice, &frameBufferInfo, nullptr, &mSwapChainFrameBuffers[i]));
+	}
+}
+
+void HelloVulkanApp::createCommandPool()
+{
+	QueueFamilyIndices queueFamilyIndices = findQueueFamilies(mPhysicalDevice);
+
+	VkCommandPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+
+	CHECK_AND_THROW("Failed to create command pool!",
+		::vkCreateCommandPool(mDevice, &poolInfo, nullptr, &mCommandPool));
+}
+
+void HelloVulkanApp::createCommandBuffer()
+{
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = mCommandPool;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = 1;
+
+	CHECK_AND_THROW("Fialed to allocate command buffers!",
+		::vkAllocateCommandBuffers(mDevice, &allocInfo, &mCommandBuffer));
+}
+
+void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	// beginInfo.flags = 0;
+	// beginInfo.pInheritanceInfo = nullptr;
+
+	CHECK_AND_THROW("Fialed to begin recording command buffer!",
+		::vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+	VkClearValue clearColor = { { { 0.0f, 0.0f, 0.0f, 1.0f } } };
+
+	VkRenderPassBeginInfo renderPassInfo{};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.renderPass = mRenderPass;
+	renderPassInfo.framebuffer = mSwapChainFrameBuffers[imageIndex];
+	renderPassInfo.renderArea.offset = { 0, 0 };
+	renderPassInfo.renderArea.extent = mSwapChainExtent;
+	renderPassInfo.clearValueCount = 1;
+	renderPassInfo.pClearValues = &clearColor;
+
+	::vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	::vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+
+	VkViewport viewport{};
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.width = static_cast<float>(mSwapChainExtent.width);
+	viewport.height = static_cast<float>(mSwapChainExtent.height);
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+	::vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor{};
+	scissor.offset = { 0, 0 };
+	scissor.extent = mSwapChainExtent;
+	::vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	::vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+	::vkCmdEndRenderPass(commandBuffer);
+
+	CHECK_AND_THROW("Failed to record command buffer!",
+		::vkEndCommandBuffer(commandBuffer));
+}
+
+void HelloVulkanApp::drawFrame()
+{
+
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL HelloVulkanApp::debugCallBack(
