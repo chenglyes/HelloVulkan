@@ -71,6 +71,7 @@ private:
 	void createFrameBuffers();
 	void createCommandPool();
 	void createCommandBuffer();
+	void createSyncObjects();
 
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 	void drawFrame();
@@ -110,5 +111,8 @@ private:
 	std::vector<VkFramebuffer> mSwapChainFrameBuffers;
 	VkCommandPool mCommandPool{};
 	VkCommandBuffer mCommandBuffer{};
+	VkSemaphore mImageAvailableSemaphore{};
+	VkSemaphore mRenderFinishedSemaphore{};
+	VkFence mInFlightFence{};
 
 };
