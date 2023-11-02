@@ -48,7 +48,7 @@ void HelloVulkanApp::initVulkan()
 	createGraphicsPipeline();
 	createFrameBuffers();
 	createCommandPool();
-	createCommandBuffer();
+	createCommandBuffers();
 	createSyncObjects();
 }
 
@@ -68,9 +68,12 @@ void HelloVulkanApp::mainLoop()
 
 void HelloVulkanApp::cleanup()
 {
-	::vkDestroySemaphore(mDevice, mImageAvailableSemaphore, nullptr);
-	::vkDestroySemaphore(mDevice, mRenderFinishedSemaphore, nullptr);
-	::vkDestroyFence(mDevice, mInFlightFence, nullptr);
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+	{
+		::vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
+		::vkDestroySemaphore(mDevice, mRenderFinishedSemaphores[i], nullptr);
+		::vkDestroyFence(mDevice, mInFlightFences[i], nullptr);
+	}
 
 	::vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
 
@@ -738,34 +741,42 @@ void HelloVulkanApp::createCommandPool()
 		::vkCreateCommandPool(mDevice, &poolInfo, nullptr, &mCommandPool));
 }
 
-void HelloVulkanApp::createCommandBuffer()
+void HelloVulkanApp::createCommandBuffers()
 {
+	mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.commandPool = mCommandPool;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandBufferCount = 1;
+	allocInfo.commandBufferCount = static_cast<uint32_t>(mCommandBuffers.size());
 
 	CHECK_AND_THROW("Fialed to allocate command buffers!",
-		::vkAllocateCommandBuffers(mDevice, &allocInfo, &mCommandBuffer));
+		::vkAllocateCommandBuffers(mDevice, &allocInfo, mCommandBuffers.data()));
 }
 
 void HelloVulkanApp::createSyncObjects()
 {
+	mImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	mRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	mInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
 	VkSemaphoreCreateInfo semaphoreInfo{};
 	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-	CHECK_AND_THROW("Failed to create semaphores!",
-		::vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphore));
-	CHECK_AND_THROW("Failed to create semaphores!",
-		::vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphore));
 
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	CHECK_AND_THROW("Failed to create fence!",
-		::vkCreateFence(mDevice, &fenceInfo, nullptr, &mInFlightFence));
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+	{
+		CHECK_AND_THROW("Failed to create semaphores!",
+			::vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]));
+		CHECK_AND_THROW("Failed to create semaphores!",
+			::vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]));
+		CHECK_AND_THROW("Failed to create fence!",
+			::vkCreateFence(mDevice, &fenceInfo, nullptr, &mInFlightFences[i]));
+	}
 }
 
 void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
@@ -817,31 +828,31 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 
 void HelloVulkanApp::drawFrame()
 {
-	::vkWaitForFences(mDevice, 1, &mInFlightFence, VK_TRUE, UINT64_MAX);
-	::vkResetFences(mDevice, 1, &mInFlightFence);
+	::vkWaitForFences(mDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
+	::vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
 
 	uint32_t imageIndex{ 0 };
 	::vkAcquireNextImageKHR(mDevice, mSwapChain, UINT64_MAX,
-		mImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+		mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
 
-	::vkResetCommandBuffer(mCommandBuffer, 0);
-	recordCommandBuffer(mCommandBuffer, imageIndex);
+	::vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
+	recordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex);
 
 	VkSubmitInfo submitInfo{};
-	VkSemaphore waitSemaphores[] = { mImageAvailableSemaphore };
+	VkSemaphore waitSemaphores[] = { mImageAvailableSemaphores[mCurrentFrame] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	VkSemaphore signalSemaphores[] = { mRenderFinishedSemaphore };
+	VkSemaphore signalSemaphores[] = { mRenderFinishedSemaphores[mCurrentFrame] };
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = waitSemaphores;
 	submitInfo.pWaitDstStageMask = waitStages;
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &mCommandBuffer;
+	submitInfo.pCommandBuffers = &mCommandBuffers[mCurrentFrame];
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
 	CHECK_AND_THROW("Failed to submit draw command buffer!",
-		::vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFence));
+		::vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFences[mCurrentFrame]));
 
 	VkPresentInfoKHR presentInfo{};
 	VkSwapchainKHR swapChains[] = { mSwapChain };
@@ -854,6 +865,8 @@ void HelloVulkanApp::drawFrame()
 	// presentInfo.pResults = nullptr;
 
 	::vkQueuePresentKHR(mPresentQueue, &presentInfo);
+
+	mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL HelloVulkanApp::debugCallBack(

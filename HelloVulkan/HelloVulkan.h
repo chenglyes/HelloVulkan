@@ -20,6 +20,8 @@ public:
 	static constexpr bool ENABLE_VALIDATION_LAYERS = true;
 #endif // NDEBUG
 
+	static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
 public:
 	void run();
 
@@ -70,7 +72,7 @@ private:
 	void createGraphicsPipeline();
 	void createFrameBuffers();
 	void createCommandPool();
-	void createCommandBuffer();
+	void createCommandBuffers();
 	void createSyncObjects();
 
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
@@ -110,9 +112,11 @@ private:
 	VkPipeline mGraphicsPipeline{};
 	std::vector<VkFramebuffer> mSwapChainFrameBuffers;
 	VkCommandPool mCommandPool{};
-	VkCommandBuffer mCommandBuffer{};
-	VkSemaphore mImageAvailableSemaphore{};
-	VkSemaphore mRenderFinishedSemaphore{};
-	VkFence mInFlightFence{};
+
+	uint32_t mCurrentFrame{ 0 };
+	std::vector<VkCommandBuffer> mCommandBuffers;
+	std::vector<VkSemaphore> mImageAvailableSemaphores;
+	std::vector<VkSemaphore> mRenderFinishedSemaphores;
+	std::vector<VkFence> mInFlightFences;
 
 };
