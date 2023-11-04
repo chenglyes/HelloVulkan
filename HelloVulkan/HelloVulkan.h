@@ -1,11 +1,13 @@
 #pragma once
 
 #include <string>
+#include <array>
 #include <vector>
 #include <optional>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 
 class HelloVulkanApp
@@ -44,6 +46,35 @@ private:
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
+	struct Vertex
+	{
+		glm::vec2 pos;
+		glm::vec3 color;
+
+		static VkVertexInputBindingDescription getBindingDescription()
+		{
+			VkVertexInputBindingDescription bindingDescription{};
+			bindingDescription.binding = 0;
+			bindingDescription.stride = sizeof(Vertex);
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return bindingDescription;
+		}
+
+		static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+		{
+			std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+			attributeDescriptions[0].binding = 0;
+			attributeDescriptions[0].location = 0;
+			attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributeDescriptions[0].offset = offsetof(Vertex, pos);
+			attributeDescriptions[1].binding = 0;
+			attributeDescriptions[1].location = 1;
+			attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributeDescriptions[1].offset = offsetof(Vertex, color);
+			return attributeDescriptions;
+		}
+	};
+
 private:
 	void initWindow();
 	void initVulkan();
@@ -66,12 +97,16 @@ private:
 	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 	void createSwapChain();
+	void cleanupSwapChain();
+	void recreateSwapChain();
 	void createImageViews();
 	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createRenderPass();
 	void createGraphicsPipeline();
 	void createFrameBuffers();
 	void createCommandPool();
+	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+	void createVertexBuffer();
 	void createCommandBuffers();
 	void createSyncObjects();
 
@@ -88,6 +123,7 @@ private:
 	static void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
 		const VkAllocationCallbacks* pAllocator);
 	static std::vector<char> readFile(const std::string& filename);
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 private:
 	GLFWwindow* mWindow{ nullptr };
@@ -118,5 +154,16 @@ private:
 	std::vector<VkSemaphore> mImageAvailableSemaphores;
 	std::vector<VkSemaphore> mRenderFinishedSemaphores;
 	std::vector<VkFence> mInFlightFences;
+
+	bool mFrameBufferResized{ false };
+
+	const std::vector<Vertex> mVertices{
+		{{ 0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+		{{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+	};
+
+	VkBuffer mVertexBuffer{};
+	VkDeviceMemory mVertexBufferMemory{};
 
 };

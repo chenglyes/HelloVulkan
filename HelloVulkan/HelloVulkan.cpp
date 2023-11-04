@@ -31,8 +31,10 @@ void HelloVulkanApp::initWindow()
 	::glfwInit();
 
 	::glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	::glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	// ::glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	mWindow = ::glfwCreateWindow(WIDTH, HEIGHT, "Hello Vulkan", nullptr, nullptr);
+	::glfwSetWindowUserPointer(mWindow, this);
+	::glfwSetFramebufferSizeCallback(mWindow, framebufferResizeCallback);
 }
 
 void HelloVulkanApp::initVulkan()
@@ -48,6 +50,7 @@ void HelloVulkanApp::initVulkan()
 	createGraphicsPipeline();
 	createFrameBuffers();
 	createCommandPool();
+	createVertexBuffer();
 	createCommandBuffers();
 	createSyncObjects();
 }
@@ -68,6 +71,15 @@ void HelloVulkanApp::mainLoop()
 
 void HelloVulkanApp::cleanup()
 {
+	cleanupSwapChain();
+
+	::vkDestroyBuffer(mDevice, mVertexBuffer, nullptr);
+	::vkFreeMemory(mDevice, mVertexBufferMemory, nullptr);
+
+	::vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
+	::vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
+	::vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
+
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
 	{
 		::vkDestroySemaphore(mDevice, mImageAvailableSemaphores[i], nullptr);
@@ -76,23 +88,6 @@ void HelloVulkanApp::cleanup()
 	}
 
 	::vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
-
-	for (auto framebuffer : mSwapChainFrameBuffers)
-	{
-		::vkDestroyFramebuffer(mDevice, framebuffer, nullptr);
-	}
-
-	::vkDestroyPipeline(mDevice, mGraphicsPipeline, nullptr);
-	::vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
-	::vkDestroyRenderPass(mDevice, mRenderPass, nullptr);
-
-	for (auto imageView : mSwapChainImageViews)
-	{
-		::vkDestroyImageView(mDevice, imageView, nullptr);
-	}
-
-	::vkDestroySwapchainKHR(mDevice, mSwapChain, nullptr);
-
 	::vkDestroyDevice(mDevice, nullptr);
 
 	if (ENABLE_VALIDATION_LAYERS)
@@ -490,6 +485,41 @@ void HelloVulkanApp::createSwapChain()
 	mSwapChainExtent = extent;
 }
 
+void HelloVulkanApp::cleanupSwapChain()
+{
+	for (auto framebuffer : mSwapChainFrameBuffers)
+	{
+		::vkDestroyFramebuffer(mDevice, framebuffer, nullptr);
+	}
+
+	for (auto imageView : mSwapChainImageViews)
+	{
+		::vkDestroyImageView(mDevice, imageView, nullptr);
+	}
+
+	::vkDestroySwapchainKHR(mDevice, mSwapChain, nullptr);
+}
+
+void HelloVulkanApp::recreateSwapChain()
+{
+	int width{ 0 }, height{ 0 };
+	for ( ; ; )
+	{
+		::glfwGetFramebufferSize(mWindow, &width, &height);
+		if (width != 0 && height != 0)
+			break;
+
+		::glfwWaitEvents();
+	}
+
+	::vkDeviceWaitIdle(mDevice);
+
+	cleanupSwapChain();
+	createSwapChain();
+	createImageViews();
+	createFrameBuffers();
+}
+
 void HelloVulkanApp::createImageViews()
 {
 	mSwapChainImageViews.resize(mSwapChainImages.size());
@@ -596,19 +626,15 @@ void HelloVulkanApp::createGraphicsPipeline()
 
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-	std::vector<VkDynamicState> dynamicStates =
-	{
-		VK_DYNAMIC_STATE_VIEWPORT,
-		VK_DYNAMIC_STATE_SCISSOR
-	};
-
-	VkPipelineDynamicStateCreateInfo dynamicState{};
-	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-	dynamicState.pDynamicStates = dynamicStates.data();
+	auto bindingDescription = Vertex::getBindingDescription();
+	auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -674,6 +700,17 @@ void HelloVulkanApp::createGraphicsPipeline()
 	// colorBlending.blendConstants[1] = 0.0f;
 	// colorBlending.blendConstants[2] = 0.0f;
 	// colorBlending.blendConstants[3] = 0.0f;
+
+	std::vector<VkDynamicState> dynamicStates =
+	{
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+
+	VkPipelineDynamicStateCreateInfo dynamicState{};
+	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+	dynamicState.pDynamicStates = dynamicStates.data();
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -741,6 +778,51 @@ void HelloVulkanApp::createCommandPool()
 		::vkCreateCommandPool(mDevice, &poolInfo, nullptr, &mCommandPool));
 }
 
+uint32_t HelloVulkanApp::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memProperties{};
+	::vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &memProperties);
+
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i)
+	{
+		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+			return i;
+	}
+
+	throw std::runtime_error("Failed to find suitable memory type!");
+}
+
+void HelloVulkanApp::createVertexBuffer()
+{
+	VkBufferCreateInfo bufferInfo{};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = sizeof(mVertices[0]) * mVertices.size();
+	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	CHECK_AND_THROW("Failed to create vertex buffer!",
+		::vkCreateBuffer(mDevice, &bufferInfo, nullptr, &mVertexBuffer));
+
+	VkMemoryRequirements memRequirements{};
+	::vkGetBufferMemoryRequirements(mDevice, mVertexBuffer, &memRequirements);
+
+	VkMemoryAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocInfo.allocationSize = memRequirements.size;
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	CHECK_AND_THROW("Failed to allocate vertex buffer memory!",
+		::vkAllocateMemory(mDevice, &allocInfo, nullptr, &mVertexBufferMemory));
+
+	::vkBindBufferMemory(mDevice, mVertexBuffer, mVertexBufferMemory, 0);
+
+	void* data{ nullptr };
+	::vkMapMemory(mDevice, mVertexBufferMemory, 0, bufferInfo.size, 0, &data);
+	memcpy(data, mVertices.data(), static_cast<size_t>(bufferInfo.size));
+	::vkUnmapMemory(mDevice, mVertexBufferMemory);
+}
+
 void HelloVulkanApp::createCommandBuffers()
 {
 	mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -790,7 +872,6 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 		::vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
 	VkClearValue clearColor = { { { 0.0f, 0.0f, 0.0f, 1.0f } } };
-
 	VkRenderPassBeginInfo renderPassInfo{};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass = mRenderPass;
@@ -799,10 +880,7 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	renderPassInfo.renderArea.extent = mSwapChainExtent;
 	renderPassInfo.clearValueCount = 1;
 	renderPassInfo.pClearValues = &clearColor;
-
 	::vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-	::vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
 
 	VkViewport viewport{};
 	viewport.x = 0.0f;
@@ -818,7 +896,13 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	scissor.extent = mSwapChainExtent;
 	::vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	::vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+	::vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+
+	VkBuffer vertexBuffers[] = { mVertexBuffer };
+	VkDeviceSize offsets[] = { 0 };
+	::vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+	::vkCmdDraw(commandBuffer, static_cast<uint32_t>(mVertices.size()), 1, 0, 0);
 
 	::vkCmdEndRenderPass(commandBuffer);
 
@@ -829,11 +913,21 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 void HelloVulkanApp::drawFrame()
 {
 	::vkWaitForFences(mDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
-	::vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
 
 	uint32_t imageIndex{ 0 };
-	::vkAcquireNextImageKHR(mDevice, mSwapChain, UINT64_MAX,
+	VkResult result = ::vkAcquireNextImageKHR(mDevice, mSwapChain, UINT64_MAX,
 		mImageAvailableSemaphores[mCurrentFrame], VK_NULL_HANDLE, &imageIndex);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		recreateSwapChain();
+		return;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+	{
+		throw std::runtime_error("Failed to acquire swap chain image!");
+	}
+
+	::vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
 
 	::vkResetCommandBuffer(mCommandBuffers[mCurrentFrame], 0);
 	recordCommandBuffer(mCommandBuffers[mCurrentFrame], imageIndex);
@@ -864,7 +958,16 @@ void HelloVulkanApp::drawFrame()
 	presentInfo.pImageIndices = &imageIndex;
 	// presentInfo.pResults = nullptr;
 
-	::vkQueuePresentKHR(mPresentQueue, &presentInfo);
+	result = ::vkQueuePresentKHR(mPresentQueue, &presentInfo);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || mFrameBufferResized)
+	{
+		mFrameBufferResized = false;
+		recreateSwapChain();
+	}
+	else if (result != VK_SUCCESS)
+	{
+		throw std::runtime_error("Failed to present swap chain image!");
+	}
 
 	mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
@@ -920,6 +1023,12 @@ std::vector<char> HelloVulkanApp::readFile(const std::string& filename)
 	file.close();
 
 	return buffer;
+}
+
+void HelloVulkanApp::framebufferResizeCallback(GLFWwindow* window, int width, int height)
+{
+	auto app = reinterpret_cast<HelloVulkanApp*>(::glfwGetWindowUserPointer(window));
+	app->mFrameBufferResized = true;
 }
 
 int main()
