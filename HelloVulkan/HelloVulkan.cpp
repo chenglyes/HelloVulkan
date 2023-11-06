@@ -792,35 +792,89 @@ uint32_t HelloVulkanApp::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFla
 	throw std::runtime_error("Failed to find suitable memory type!");
 }
 
-void HelloVulkanApp::createVertexBuffer()
+void HelloVulkanApp::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
 	VkBufferCreateInfo bufferInfo{};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(mVertices[0]) * mVertices.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	bufferInfo.size = size;
+	bufferInfo.usage = usage;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	CHECK_AND_THROW("Failed to create vertex buffer!",
-		::vkCreateBuffer(mDevice, &bufferInfo, nullptr, &mVertexBuffer));
+		::vkCreateBuffer(mDevice, &bufferInfo, nullptr, &buffer));
 
 	VkMemoryRequirements memRequirements{};
-	::vkGetBufferMemoryRequirements(mDevice, mVertexBuffer, &memRequirements);
+	::vkGetBufferMemoryRequirements(mDevice, buffer, &memRequirements);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
 	CHECK_AND_THROW("Failed to allocate vertex buffer memory!",
-		::vkAllocateMemory(mDevice, &allocInfo, nullptr, &mVertexBufferMemory));
+		::vkAllocateMemory(mDevice, &allocInfo, nullptr, &bufferMemory));
 
-	::vkBindBufferMemory(mDevice, mVertexBuffer, mVertexBufferMemory, 0);
+	::vkBindBufferMemory(mDevice, buffer, bufferMemory, 0);
+}
+
+void HelloVulkanApp::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+{
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = mCommandPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer{};
+	::vkAllocateCommandBuffers(mDevice, &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	::vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+	VkBufferCopy copyRegion{};
+	copyRegion.size = size;
+	//copyRegion.srcOffset = 0;
+	//copyRegion.dstOffset = 0;
+	::vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+	::vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+	::vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+
+	::vkQueueWaitIdle(mGraphicsQueue);
+
+	::vkFreeCommandBuffers(mDevice, mCommandPool, 1, &commandBuffer);
+}
+
+void HelloVulkanApp::createVertexBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(mVertices[0]) * mVertices.size();
+
+	VkBuffer stagingBuffer{};
+	VkDeviceMemory stagingBufferMemory{};
+	createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		stagingBuffer, stagingBufferMemory);
 
 	void* data{ nullptr };
-	::vkMapMemory(mDevice, mVertexBufferMemory, 0, bufferInfo.size, 0, &data);
-	memcpy(data, mVertices.data(), static_cast<size_t>(bufferInfo.size));
-	::vkUnmapMemory(mDevice, mVertexBufferMemory);
+	::vkMapMemory(mDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+	memcpy(data, mVertices.data(), static_cast<size_t>(bufferSize));
+	::vkUnmapMemory(mDevice, stagingBufferMemory);
+
+	createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		mVertexBuffer, mVertexBufferMemory);
+
+	copyBuffer(stagingBuffer, mVertexBuffer, bufferSize);
+
+	::vkDestroyBuffer(mDevice, stagingBuffer, nullptr);
+	::vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
 }
 
 void HelloVulkanApp::createCommandBuffers()
