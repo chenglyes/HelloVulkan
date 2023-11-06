@@ -1184,7 +1184,7 @@ void HelloVulkanApp::framebufferResizeCallback(GLFWwindow* window, int width, in
 
 int main()
 {
-	HelloVulkanApp app{};
+	HelloVulkanApp app;
 
 	try
 	{
