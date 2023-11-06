@@ -11,6 +11,10 @@
 #include <cstdlib>
 #include <thread>
 
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
@@ -47,11 +51,13 @@ void HelloVulkanApp::initVulkan()
 	createSwapChain();
 	createImageViews();
 	createRenderPass();
+	createDescriptorSetLayout();
 	createGraphicsPipeline();
 	createFrameBuffers();
 	createCommandPool();
 	createVertexBuffer();
 	createIndexBuffer();
+	createUniformBuffers();
 	createCommandBuffers();
 	createSyncObjects();
 }
@@ -73,6 +79,13 @@ void HelloVulkanApp::mainLoop()
 void HelloVulkanApp::cleanup()
 {
 	cleanupSwapChain();
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+	{
+		::vkDestroyBuffer(mDevice, mUniformBuffers[i], nullptr);
+		::vkFreeMemory(mDevice, mUniformBuffersMemory[i], nullptr);
+	}
+	::vkDestroyDescriptorSetLayout(mDevice, mDescriptorSetLayout, nullptr);
 
 	::vkDestroyBuffer(mDevice, mIndexBuffer, nullptr);
 	::vkFreeMemory(mDevice, mIndexBufferMemory, nullptr);
@@ -607,6 +620,24 @@ void HelloVulkanApp::createRenderPass()
 		::vkCreateRenderPass(mDevice, &renderPassInfo, nullptr, &mRenderPass));
 }
 
+void HelloVulkanApp::createDescriptorSetLayout()
+{
+	VkDescriptorSetLayoutBinding uboLayoutBinding{};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	// uboLayoutBinding.pImmutableSamplers = nullptr;
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 1;
+	layoutInfo.pBindings = &uboLayoutBinding;
+
+	CHECK_AND_THROW("Failed to create descriptor set layout!",
+		::vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mDescriptorSetLayout));
+}
+
 void HelloVulkanApp::createGraphicsPipeline()
 {
 	auto vertShaderCode = readFile("Assets/Shaders/vert.spv");
@@ -717,8 +748,8 @@ void HelloVulkanApp::createGraphicsPipeline()
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	// pipelineLayoutInfo.setLayoutCount = 0;
-	// pipelineLayoutInfo.pSetLayouts = nullptr;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &mDescriptorSetLayout;
 	// pipelineLayoutInfo.pushConstantRangeCount = 0;
 	// pipelineLayoutInfo.pPushConstantRanges = nullptr;
 	CHECK_AND_THROW("Failed to create pipeline layout!",
@@ -905,6 +936,24 @@ void HelloVulkanApp::createIndexBuffer()
 	::vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
 }
 
+void HelloVulkanApp::createUniformBuffers()
+{
+	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+	mUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+	mUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	mUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+	{
+		createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			mUniformBuffers[i], mUniformBuffersMemory[i]);
+
+		::vkMapMemory(mDevice, mUniformBuffersMemory[i], 0, bufferSize, 0, &mUniformBuffersMapped[i]);
+	}
+}
+
 void HelloVulkanApp::createCommandBuffers()
 {
 	mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -994,6 +1043,22 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 		::vkEndCommandBuffer(commandBuffer));
 }
 
+void HelloVulkanApp::updateUniformBuffer(uint32_t currentImage)
+{
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+	UniformBufferObject ubo{};
+	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.proj = glm::perspective(glm::radians(45.0f), mSwapChainExtent.width / (float)mSwapChainExtent.height, 0.1f, 10.0f);
+	ubo.proj[1][1] *= -1;
+
+	memcpy(mUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
 void HelloVulkanApp::drawFrame()
 {
 	::vkWaitForFences(mDevice, 1, &mInFlightFences[mCurrentFrame], VK_TRUE, UINT64_MAX);
@@ -1010,6 +1075,8 @@ void HelloVulkanApp::drawFrame()
 	{
 		throw std::runtime_error("Failed to acquire swap chain image!");
 	}
+
+	updateUniformBuffer(mCurrentFrame);
 
 	::vkResetFences(mDevice, 1, &mInFlightFences[mCurrentFrame]);
 

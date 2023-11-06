@@ -75,6 +75,13 @@ private:
 		}
 	};
 
+	struct UniformBufferObject
+	{
+		glm::mat4 model;
+		glm::mat4 view;
+		glm::mat4 proj;
+	};
+
 private:
 	void initWindow();
 	void initVulkan();
@@ -102,6 +109,7 @@ private:
 	void createImageViews();
 	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createRenderPass();
+	void createDescriptorSetLayout();
 	void createGraphicsPipeline();
 	void createFrameBuffers();
 	void createCommandPool();
@@ -111,10 +119,12 @@ private:
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void createVertexBuffer();
 	void createIndexBuffer();
+	void createUniformBuffers();
 	void createCommandBuffers();
 	void createSyncObjects();
 
 	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+	void updateUniformBuffer(uint32_t currentImage);
 	void drawFrame();
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallBack(
@@ -148,6 +158,7 @@ private:
 	VkFormat mSwapChainImageFormat{};
 	VkExtent2D mSwapChainExtent{};
 	VkRenderPass mRenderPass{};
+	VkDescriptorSetLayout mDescriptorSetLayout{};
 	VkPipelineLayout mPipelineLayout{};
 	VkPipeline mGraphicsPipeline{};
 	std::vector<VkFramebuffer> mSwapChainFrameBuffers;
@@ -176,4 +187,8 @@ private:
 	VkBuffer mIndexBuffer{};
 	VkDeviceMemory mIndexBufferMemory{};
 
+	std::vector<VkBuffer> mUniformBuffers;
+	std::vector<VkDeviceMemory> mUniformBuffersMemory;
+	std::vector<void*> mUniformBuffersMapped;
+	
 };
