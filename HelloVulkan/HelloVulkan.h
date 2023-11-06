@@ -110,6 +110,7 @@ private:
 		VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void createVertexBuffer();
+	void createIndexBuffer();
 	void createCommandBuffers();
 	void createSyncObjects();
 
@@ -161,12 +162,18 @@ private:
 	bool mFrameBufferResized{ false };
 
 	const std::vector<Vertex> mVertices{
-		{{ 0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-		{{ 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{-0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}},
+	};
+	const std::vector<uint16_t> mIndices{
+		0, 1, 2, 2, 3, 0
 	};
 
 	VkBuffer mVertexBuffer{};
 	VkDeviceMemory mVertexBufferMemory{};
+	VkBuffer mIndexBuffer{};
+	VkDeviceMemory mIndexBufferMemory{};
 
 };

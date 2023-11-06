@@ -51,6 +51,7 @@ void HelloVulkanApp::initVulkan()
 	createFrameBuffers();
 	createCommandPool();
 	createVertexBuffer();
+	createIndexBuffer();
 	createCommandBuffers();
 	createSyncObjects();
 }
@@ -73,6 +74,8 @@ void HelloVulkanApp::cleanup()
 {
 	cleanupSwapChain();
 
+	::vkDestroyBuffer(mDevice, mIndexBuffer, nullptr);
+	::vkFreeMemory(mDevice, mIndexBufferMemory, nullptr);
 	::vkDestroyBuffer(mDevice, mVertexBuffer, nullptr);
 	::vkFreeMemory(mDevice, mVertexBufferMemory, nullptr);
 
@@ -877,6 +880,31 @@ void HelloVulkanApp::createVertexBuffer()
 	::vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
 }
 
+void HelloVulkanApp::createIndexBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(mIndices[0]) * mIndices.size();
+
+	VkBuffer stagingBuffer{};
+	VkDeviceMemory stagingBufferMemory{};
+	createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		stagingBuffer, stagingBufferMemory);
+
+	void* data{ nullptr };
+	::vkMapMemory(mDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+	memcpy(data, mIndices.data(), static_cast<size_t>(bufferSize));
+	::vkUnmapMemory(mDevice, stagingBufferMemory);
+
+	createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		mIndexBuffer, mIndexBufferMemory);
+
+	copyBuffer(stagingBuffer, mIndexBuffer, bufferSize);
+
+	::vkDestroyBuffer(mDevice, stagingBuffer, nullptr);
+	::vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
+}
+
 void HelloVulkanApp::createCommandBuffers()
 {
 	mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
@@ -955,8 +983,10 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	VkBuffer vertexBuffers[] = { mVertexBuffer };
 	VkDeviceSize offsets[] = { 0 };
 	::vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+	::vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-	::vkCmdDraw(commandBuffer, static_cast<uint32_t>(mVertices.size()), 1, 0, 0);
+	// ::vkCmdDraw(commandBuffer, static_cast<uint32_t>(mVertices.size()), 1, 0, 0);
+	::vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mIndices.size()), 1, 0, 0, 0);
 
 	::vkCmdEndRenderPass(commandBuffer);
 
