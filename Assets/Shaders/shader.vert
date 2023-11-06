@@ -24,6 +24,7 @@
 
 layout(binding = 0) uniform UniformBufferObject
 {
+    vec2 foo;
     mat4 model;
     mat4 view;
     mat4 proj;

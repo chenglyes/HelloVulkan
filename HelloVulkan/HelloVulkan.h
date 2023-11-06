@@ -5,9 +5,11 @@
 #include <vector>
 #include <optional>
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
 
 
 class HelloVulkanApp
@@ -77,6 +79,7 @@ private:
 
 	struct UniformBufferObject
 	{
+		glm::vec2 foo;
 		glm::mat4 model;
 		glm::mat4 view;
 		glm::mat4 proj;
@@ -120,6 +123,8 @@ private:
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
+	void createDescriptorPool();
+	void createDescriptorSets();
 	void createCommandBuffers();
 	void createSyncObjects();
 
@@ -190,5 +195,8 @@ private:
 	std::vector<VkBuffer> mUniformBuffers;
 	std::vector<VkDeviceMemory> mUniformBuffersMemory;
 	std::vector<void*> mUniformBuffersMapped;
+
+	VkDescriptorPool mDescriptorPool{};
+	std::vector<VkDescriptorSet> mDescriptorSets{};
 	
 };
