@@ -81,6 +81,8 @@ void HelloVulkanApp::cleanup()
 {
 	cleanupSwapChain();
 
+	::vkDestroyImage(mDevice, mTextureImage, nullptr);
+	::vkFreeMemory(mDevice, mTextureImageMemory, nullptr);
 	::vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -1057,6 +1059,9 @@ void HelloVulkanApp::createTextureImage()
 
 	transitionImageLayout(mTextureImage, VK_FORMAT_R8G8B8A8_SRGB,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	::vkDestroyBuffer(mDevice, stagingBuffer, nullptr);
+	::vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
 }
 
 void HelloVulkanApp::createVertexBuffer()
