@@ -12,6 +12,11 @@ set_targetdir("Bin")
 set_rundir(".")
 
 
+if is_mode("debug") then
+    set_suffixname("_d")
+end
+
+
 target("HelloVulkan")
     set_kind("binary")
 
