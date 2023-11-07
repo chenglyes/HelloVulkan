@@ -109,6 +109,7 @@ private:
 	void createSwapChain();
 	void cleanupSwapChain();
 	void recreateSwapChain();
+	VkImageView createImageView(VkImage image, VkFormat format);
 	void createImageViews();
 	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createRenderPass();
@@ -127,6 +128,8 @@ private:
 	void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
 		VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 	void createTextureImage();
+	void createTextureImageView();
+	void createTextureSampler();
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
@@ -208,5 +211,7 @@ private:
 
 	VkImage mTextureImage{};
 	VkDeviceMemory mTextureImageMemory{};
-	
+	VkImageView mTextureImageView{};
+	VkSampler mTextureSampler{};
+
 };

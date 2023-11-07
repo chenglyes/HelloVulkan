@@ -54,6 +54,8 @@ void HelloVulkanApp::initVulkan()
 	createFrameBuffers();
 	createCommandPool();
 	createTextureImage();
+	createTextureImageView();
+	createTextureSampler();
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
@@ -81,6 +83,8 @@ void HelloVulkanApp::cleanup()
 {
 	cleanupSwapChain();
 
+	::vkDestroySampler(mDevice, mTextureSampler, nullptr);
+	::vkDestroyImageView(mDevice, mTextureImageView, nullptr);
 	::vkDestroyImage(mDevice, mTextureImage, nullptr);
 	::vkFreeMemory(mDevice, mTextureImageMemory, nullptr);
 	::vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
@@ -320,6 +324,10 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice device)
 	::vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
 	// TODO: Check properties and features
+	if (deviceFeatures.samplerAnisotropy == VK_FALSE)
+	{
+		return false;
+	}
 
 	auto indices = findQueueFamilies(device);
 	bool extensionSupported = checkDeviceExtensionSupport(device);
@@ -379,6 +387,7 @@ void HelloVulkanApp::createLogicalDevice()
 	}
 
 	VkPhysicalDeviceFeatures deviceFeatures{};
+	deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 	VkDeviceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -541,30 +550,38 @@ void HelloVulkanApp::recreateSwapChain()
 	createFrameBuffers();
 }
 
+VkImageView HelloVulkanApp::createImageView(VkImage image, VkFormat format)
+{
+	VkImageView imageView{};
+
+	VkImageViewCreateInfo createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	createInfo.image = image;
+	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	createInfo.format = format;
+	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	createInfo.subresourceRange.baseMipLevel = 0;
+	createInfo.subresourceRange.levelCount = 1;
+	createInfo.subresourceRange.baseArrayLayer = 0;
+	createInfo.subresourceRange.layerCount = 1;
+
+	CHECK_AND_THROW("Failed to create image views!",
+		::vkCreateImageView(mDevice, &createInfo, nullptr, &imageView));
+
+	return imageView;
+}
+
 void HelloVulkanApp::createImageViews()
 {
 	mSwapChainImageViews.resize(mSwapChainImages.size());
 
 	for (size_t i = 0; i < mSwapChainImages.size(); ++i)
 	{
-		VkImageViewCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		createInfo.image = mSwapChainImages[i];
-		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		createInfo.format = mSwapChainImageFormat;
-		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		createInfo.subresourceRange.baseMipLevel = 0;
-		createInfo.subresourceRange.levelCount = 1;
-		createInfo.subresourceRange.baseArrayLayer = 0;
-		createInfo.subresourceRange.layerCount = 1;
-
-		CHECK_AND_THROW("Failed to create image views!",
-			::vkCreateImageView(mDevice, &createInfo, nullptr, &mSwapChainImageViews[i]));
-
+		mSwapChainImageViews[i] = createImageView(mSwapChainImages[i], mSwapChainImageFormat);
 	}
 }
 
@@ -1062,6 +1079,38 @@ void HelloVulkanApp::createTextureImage()
 
 	::vkDestroyBuffer(mDevice, stagingBuffer, nullptr);
 	::vkFreeMemory(mDevice, stagingBufferMemory, nullptr);
+}
+
+void HelloVulkanApp::createTextureImageView()
+{
+	mTextureImageView = createImageView(mTextureImage, VK_FORMAT_R8G8B8A8_SRGB);
+}
+
+void HelloVulkanApp::createTextureSampler()
+{
+	VkPhysicalDeviceProperties properties{};
+	::vkGetPhysicalDeviceProperties(mPhysicalDevice, &properties);
+
+	VkSamplerCreateInfo samplerInfo{};
+	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerInfo.magFilter = VK_FILTER_LINEAR;
+	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.anisotropyEnable = VK_TRUE;
+	samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	samplerInfo.unnormalizedCoordinates = VK_FALSE;
+	samplerInfo.compareEnable = VK_FALSE;
+	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	samplerInfo.mipLodBias = 0.0f;
+	samplerInfo.minLod = 0.0f;
+	samplerInfo.maxLod = 0.0f;
+
+	CHECK_AND_THROW("Failed to create texture sampler!",
+		::vkCreateSampler(mDevice, &samplerInfo, nullptr, &mTextureSampler));
 }
 
 void HelloVulkanApp::createVertexBuffer()
