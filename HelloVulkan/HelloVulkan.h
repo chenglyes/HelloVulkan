@@ -129,7 +129,7 @@ private:
 	void createSwapChain();
 	void cleanupSwapChain();
 	void recreateSwapChain();
-	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+	VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 	void createImageViews();
 	VkShaderModule createShaderModule(const std::vector<char>& code);
 	void createRenderPass();
@@ -149,9 +149,10 @@ private:
 	void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
-	void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
+	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
 		VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+	void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 	void createTextureImage();
 	void createTextureImageView();
 	void createTextureSampler();
@@ -228,6 +229,7 @@ private:
 	VkDescriptorPool mDescriptorPool{};
 	std::vector<VkDescriptorSet> mDescriptorSets{};
 
+	uint32_t mMipLevels{ 0 };
 	VkImage mTextureImage{};
 	VkDeviceMemory mTextureImageMemory{};
 	VkImageView mTextureImageView{};
