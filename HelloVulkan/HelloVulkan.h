@@ -8,7 +8,9 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+#include <glm/gtx/hash.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
@@ -18,6 +20,9 @@ class HelloVulkanApp
 public:
 	static constexpr uint32_t WIDTH = 800;
 	static constexpr uint32_t HEIGHT = 600;
+
+	static constexpr const char* MODEL_PATH = "Assets/Models/viking_room.obj";
+	static constexpr const char* TEXTURE_PATH = "Assets/Textures/viking_room.png";
 
 #ifdef NDEBUG
 	static constexpr bool ENABLE_VALIDATION_LAYERS = false;
@@ -30,7 +35,7 @@ public:
 public:
 	void run();
 
-private:
+public:
 	struct QueueFamilyIndices
 	{
 		std::optional<uint32_t> graphicsFamily;
@@ -54,6 +59,11 @@ private:
 		glm::vec3 pos;
 		glm::vec3 color;
 		glm::vec2 texCoord;
+
+		bool operator==(const Vertex& other) const
+		{
+			return pos == other.pos && color == other.color && texCoord == other.texCoord;
+		}
 
 		static VkVertexInputBindingDescription getBindingDescription()
 		{
@@ -145,6 +155,7 @@ private:
 	void createTextureImage();
 	void createTextureImageView();
 	void createTextureSampler();
+	void loadModel();
 	void createVertexBuffer();
 	void createIndexBuffer();
 	void createUniformBuffers();
@@ -202,21 +213,8 @@ private:
 
 	bool mFrameBufferResized{ false };
 
-	const std::vector<Vertex> mVertices{
-		{{-0.5f, -0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{ 0.5f, -0.5f,  0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{ 0.5f,  0.5f,  0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f,  0.5f,  0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-	
-		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-	};
-	const std::vector<uint16_t> mIndices{
-		0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4,
-	};
+	std::vector<Vertex> mVertices;
+	std::vector<uint32_t> mIndices;
 
 	VkBuffer mVertexBuffer{};
 	VkDeviceMemory mVertexBufferMemory{};

@@ -3,6 +3,7 @@
 #include <format>
 #include <set>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 #include <stdexcept>
 #include <chrono>
@@ -13,8 +14,11 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#define  STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#define TINYOBJLOADER_IMPKEMENTATION
+#include <tiny_obj_loader.h>
 
 
 #define CHECK_AND_THROW(message, result) if (result != VK_SUCCESS) throw std::runtime_error(message);
@@ -57,6 +61,7 @@ void HelloVulkanApp::initVulkan()
 	createTextureImage();
 	createTextureImageView();
 	createTextureSampler();
+	loadModel();
 	createVertexBuffer();
 	createIndexBuffer();
 	createUniformBuffers();
@@ -1154,7 +1159,7 @@ void HelloVulkanApp::createImage(uint32_t width, uint32_t height, VkFormat forma
 void HelloVulkanApp::createTextureImage()
 {
 	int texWidth{ 0 }, texHeight{ 0 }, texChannels{ 0 };
-	stbi_uc* pixels = stbi_load("Assets/Textures/texture.jpg",
+	stbi_uc* pixels = stbi_load(TEXTURE_PATH,
 		&texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 	if (pixels == nullptr)
 	{
@@ -1224,6 +1229,63 @@ void HelloVulkanApp::createTextureSampler()
 
 	CHECK_AND_THROW("Failed to create texture sampler!",
 		::vkCreateSampler(mDevice, &samplerInfo, nullptr, &mTextureSampler));
+}
+
+namespace std
+{
+	template<> struct hash<HelloVulkanApp::Vertex>
+	{
+		size_t operator()(HelloVulkanApp::Vertex const& vertex) const
+		{
+			return ((hash<glm::vec3>()(vertex.pos) ^
+				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.texCoord) << 1);
+		}
+	};
+}
+
+void HelloVulkanApp::loadModel()
+{
+	tinyobj::attrib_t attrib;
+	std::vector<tinyobj::shape_t> shapes;
+	std::vector<tinyobj::material_t> materials;
+	std::string warn, err;
+
+	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH))
+	{
+		throw std::runtime_error(warn + err);
+	}
+
+	std::unordered_map<Vertex, uint32_t> uniqueVertices;
+
+	for (const auto& shape : shapes)
+	{
+		for (const auto& index : shape.mesh.indices)
+		{
+			Vertex vertex{};
+
+			vertex.pos = {
+				attrib.vertices[3 * index.vertex_index + 0],
+				attrib.vertices[3 * index.vertex_index + 1],
+				attrib.vertices[3 * index.vertex_index + 2],
+			};
+
+			vertex.texCoord = {
+				attrib.texcoords[2 * index.texcoord_index + 0],
+				1.0f - attrib.texcoords[2 * index.texcoord_index + 1],
+			};
+
+			vertex.color = { 1.0f, 1.0f, 1.0f };
+
+			if (uniqueVertices.count(vertex) == 0)
+			{
+				uniqueVertices[vertex] = static_cast<uint32_t>(mVertices.size());
+				mVertices.push_back(vertex);
+			}
+			
+			mIndices.push_back(uniqueVertices[vertex]);
+		}
+	}
 }
 
 void HelloVulkanApp::createVertexBuffer()
@@ -1441,7 +1503,7 @@ void HelloVulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	VkBuffer vertexBuffers[] = { mVertexBuffer };
 	VkDeviceSize offsets[] = { 0 };
 	::vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-	::vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+	::vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 	::vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		mPipelineLayout, 0, 1,&mDescriptorSets[mCurrentFrame], 0, nullptr);
 
@@ -1462,7 +1524,7 @@ void HelloVulkanApp::updateUniformBuffer(uint32_t currentImage)
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
 	UniformBufferObject ubo{};
-	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo.proj = glm::perspective(glm::radians(45.0f), mSwapChainExtent.width / (float)mSwapChainExtent.height, 0.1f, 10.0f);
 	ubo.proj[1][1] *= -1;

@@ -4,8 +4,8 @@ add_rules("mode.debug", "mode.release")
 set_languages("cxx20")
 
 
-add_requires("stb", "glm", "glfw", "vulkansdk")
-add_packages("stb", "glm", "glfw", "vulkansdk")
+add_requires("stb", "tinyobjloader", "glm", "glfw", "vulkansdk")
+add_packages("stb", "tinyobjloader", "glm", "glfw", "vulkansdk")
 
 
 set_targetdir("Bin")
