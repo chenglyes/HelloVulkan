@@ -121,6 +121,7 @@ private:
 	bool checkDeviceExtensionSupport(VkPhysicalDevice device);
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 	bool isDeviceSuitable(VkPhysicalDevice device);
+	VkSampleCountFlagBits getMaxUsableSampleCount();
 	void pickPhysicalDevice();
 	void createLogicalDevice();
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
@@ -135,6 +136,7 @@ private:
 	void createRenderPass();
 	void createDescriptorSetLayout();
 	void createGraphicsPipeline();
+	void createColorResources();
 	VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
 		VkImageTiling tiling, VkFormatFeatureFlags features);
 	VkFormat findDepthFormat();
@@ -150,7 +152,7 @@ private:
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
-	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
 		VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 	void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 	void createTextureImage();
@@ -238,5 +240,10 @@ private:
 	VkImage mDepthImage{};
 	VkDeviceMemory mDepthImageMemory{};
 	VkImageView mDepthImageView{};
+
+	VkSampleCountFlagBits mMSAASampless{ VK_SAMPLE_COUNT_1_BIT };
+	VkImage mColorImage{};
+	VkDeviceMemory mColorImageMemory{};
+	VkImageView mColorImageView{};
 
 };

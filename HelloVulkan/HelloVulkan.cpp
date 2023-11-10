@@ -56,6 +56,7 @@ void HelloVulkanApp::initVulkan()
 	createDescriptorSetLayout();
 	createGraphicsPipeline();
 	createCommandPool();
+	createColorResources();
 	createDepthResources();
 	createFrameBuffers();
 	createTextureImage();
@@ -347,6 +348,30 @@ bool HelloVulkanApp::isDeviceSuitable(VkPhysicalDevice device)
 	return indices.isComplete() && extensionSupported && swapChainAdequate;
 }
 
+VkSampleCountFlagBits HelloVulkanApp::getMaxUsableSampleCount()
+{
+	VkPhysicalDeviceProperties physicalDeviceProperties{};
+	::vkGetPhysicalDeviceProperties(mPhysicalDevice, &physicalDeviceProperties);
+
+	VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts &
+		physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+
+	if (counts & VK_SAMPLE_COUNT_64_BIT)
+		return VK_SAMPLE_COUNT_64_BIT;
+	if (counts & VK_SAMPLE_COUNT_32_BIT)
+		return VK_SAMPLE_COUNT_32_BIT;
+	if (counts & VK_SAMPLE_COUNT_16_BIT)
+		return VK_SAMPLE_COUNT_16_BIT;
+	if (counts & VK_SAMPLE_COUNT_8_BIT)
+		return VK_SAMPLE_COUNT_8_BIT;
+	if (counts & VK_SAMPLE_COUNT_4_BIT)
+		return VK_SAMPLE_COUNT_4_BIT;
+	if (counts & VK_SAMPLE_COUNT_2_BIT)
+		return VK_SAMPLE_COUNT_2_BIT;
+
+	return VK_SAMPLE_COUNT_1_BIT;
+}
+
 void HelloVulkanApp::pickPhysicalDevice()
 {
 	uint32_t deviceCount{ 0 };
@@ -358,20 +383,18 @@ void HelloVulkanApp::pickPhysicalDevice()
 	std::vector<VkPhysicalDevice> devices(deviceCount);
 	::vkEnumeratePhysicalDevices(mInstance, &deviceCount, devices.data());
 
-	VkPhysicalDevice physicalDevice{ VK_NULL_HANDLE };
 	for (const auto& device : devices)
 	{
 		if (isDeviceSuitable(device))
 		{
-			physicalDevice = device;
+			mPhysicalDevice = device;
+			mMSAASampless = getMaxUsableSampleCount();
 			break;
 		}
 	}
 
-	if (physicalDevice == VK_NULL_HANDLE)
+	if (mPhysicalDevice == VK_NULL_HANDLE)
 		throw std::runtime_error("Failed to find a suitable GPU!");
-
-	mPhysicalDevice = physicalDevice;
 }
 
 void HelloVulkanApp::createLogicalDevice()
@@ -394,6 +417,7 @@ void HelloVulkanApp::createLogicalDevice()
 
 	VkPhysicalDeviceFeatures deviceFeatures{};
 	deviceFeatures.samplerAnisotropy = VK_TRUE;
+	deviceFeatures.sampleRateShading = VK_TRUE;
 
 	VkDeviceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -523,6 +547,10 @@ void HelloVulkanApp::createSwapChain()
 
 void HelloVulkanApp::cleanupSwapChain()
 {
+	::vkDestroyImageView(mDevice, mColorImageView, nullptr);
+	::vkDestroyImage(mDevice, mColorImage, nullptr);
+	::vkFreeMemory(mDevice, mColorImageMemory, nullptr);
+
 	::vkDestroyImageView(mDevice, mDepthImageView, nullptr);
 	::vkDestroyImage(mDevice, mDepthImage, nullptr);
 	::vkFreeMemory(mDevice, mDepthImageMemory, nullptr);
@@ -558,6 +586,7 @@ void HelloVulkanApp::recreateSwapChain()
 
 	createSwapChain();
 	createImageViews();
+	createColorResources();
 	createDepthResources();
 	createFrameBuffers();
 }
@@ -616,13 +645,13 @@ void HelloVulkanApp::createRenderPass()
 {
 	VkAttachmentDescription colorAttachment{};
 	colorAttachment.format = mSwapChainImageFormat;
-	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	colorAttachment.samples = mMSAASampless;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	VkAttachmentReference colorAttachmentRef{};
 	colorAttachmentRef.attachment = 0;
@@ -630,7 +659,7 @@ void HelloVulkanApp::createRenderPass()
 
 	VkAttachmentDescription depthAttachment{};
 	depthAttachment.format = findDepthFormat();
-	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	depthAttachment.samples = mMSAASampless;
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -642,11 +671,26 @@ void HelloVulkanApp::createRenderPass()
 	depthAttachmentRef.attachment = 1;
 	depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+	VkAttachmentDescription colorAttachmentResolve{};
+	colorAttachmentResolve.format = mSwapChainImageFormat;
+	colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+	colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+	VkAttachmentReference colorAttachmentResolveRef{};
+	colorAttachmentResolveRef.attachment = 2;
+	colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
 	VkSubpassDescription subpass{};
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	subpass.colorAttachmentCount = 1;
 	subpass.pColorAttachments = &colorAttachmentRef;
 	subpass.pDepthStencilAttachment = &depthAttachmentRef;
+	subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
 	VkSubpassDependency dependency{};
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -659,7 +703,7 @@ void HelloVulkanApp::createRenderPass()
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
 		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-	std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+	std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
 	VkRenderPassCreateInfo renderPassInfo{};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -768,9 +812,9 @@ void HelloVulkanApp::createGraphicsPipeline()
 
 	VkPipelineMultisampleStateCreateInfo multisampling{};
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-	// multisampling.minSampleShading = 1.0f;
+	multisampling.sampleShadingEnable = VK_TRUE;
+	multisampling.rasterizationSamples = mMSAASampless;
+	multisampling.minSampleShading = 0.2f;
 	// multisampling.pSampleMask = nullptr;
 	// multisampling.alphaToCoverageEnable = VK_FALSE;
 	// multisampling.alphaToOneEnable = VK_FALSE;
@@ -852,6 +896,17 @@ void HelloVulkanApp::createGraphicsPipeline()
 	::vkDestroyShaderModule(mDevice, fragShaderModule, nullptr);
 }
 
+void HelloVulkanApp::createColorResources()
+{
+	VkFormat colorFormat = mSwapChainImageFormat;
+
+	createImage(mSwapChainExtent.width, mSwapChainExtent.height, 1, mMSAASampless, colorFormat,
+		VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mColorImage, mColorImageMemory);
+
+	mColorImageView = createImageView(mColorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+}
+
 VkFormat HelloVulkanApp::findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
 {
 	for (auto format : candidates)
@@ -886,7 +941,7 @@ void HelloVulkanApp::createDepthResources()
 {
 	VkFormat depthFormat = findDepthFormat();
 
-	createImage(mSwapChainExtent.width, mSwapChainExtent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL,
+	createImage(mSwapChainExtent.width, mSwapChainExtent.height, 1, mMSAASampless, depthFormat, VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		mDepthImage, mDepthImageMemory);
 
@@ -901,7 +956,7 @@ void HelloVulkanApp::createFrameBuffers()
 
 	for (size_t i = 0; i < mSwapChainImageViews.size(); ++i)
 	{
-		std::array<VkImageView, 2> attachments = { mSwapChainImageViews[i], mDepthImageView };
+		std::array<VkImageView, 3> attachments = { mColorImageView, mDepthImageView, mSwapChainImageViews[i] };
 		VkFramebufferCreateInfo frameBufferInfo{};
 		frameBufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		frameBufferInfo.renderPass = mRenderPass;
@@ -1121,7 +1176,7 @@ void HelloVulkanApp::transitionImageLayout(VkImage image, VkFormat format, VkIma
 	endSingleTimeCommands(commandBuffer);
 }
 
-void HelloVulkanApp::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+void HelloVulkanApp::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
 {
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1135,7 +1190,7 @@ void HelloVulkanApp::createImage(uint32_t width, uint32_t height, uint32_t mipLe
 	imageInfo.tiling = tiling;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = usage;
-	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imageInfo.samples = numSamples;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	// imageInfo.flags = 0;
 
@@ -1279,7 +1334,7 @@ void HelloVulkanApp::createTextureImage()
 	stbi_image_free(pixels);
 
 	createImage(static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), mMipLevels,
-		VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+		VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
 
